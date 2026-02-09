@@ -2,62 +2,46 @@ pipeline {
     agent any
 
     environment {
-        DOCKERHUB_USER = 'andreagpeqz'
-        DOCKERHUB_CREDENTIALS = 'docker_hub'       // ID de tus credenciales en Jenkins
-        KUBECONFIG_ID = 'kubeconfig_minikube'      // ID de tu credencial de Minikube
-        IMAGE_NAME = 'hellodocker'
-        GIT_REPO = 'https://github.com/andreagpeqz/helloDocker.git' // Tu fork
+        IMAGE_NAME = "andreagpeqz/hellodocker"
+        IMAGE_TAG = "latest"
     }
 
     stages {
-        stage('Checkout GitHub repo') {
+        stage('Checkout') {
             steps {
-                checkout scmGit(
-                    branches: [[name: '*/main']],
-                    userRemoteConfigs: [[url: "${GIT_REPO}"]]
-                )
+                git branch: 'main', url: 'https://github.com/AndreaGpeQZ/helloDocker.git'
             }
         }
 
-        stage('Build Docker Image in Minikube') {
+        stage('Build Docker Image') {
             steps {
-                script {
-                    // Configura Docker para usar el de Minikube
-                    sh 'eval $(minikube -p minikube docker-env)'
-
-                    // Construye y etiqueta la imagen
-                    sh "docker build -t ${DOCKERHUB_USER}/${IMAGE_NAME}:latest ."
-                }
+                echo "Building Docker image..."
+                bat "docker build -t %IMAGE_NAME%:%IMAGE_TAG% ."
             }
         }
 
-        stage('Push to Docker Hub') {
+        stage('Push Docker Image') {
             steps {
-                script {
-                    withCredentials([string(credentialsId: "${DOCKERHUB_CREDENTIALS}", variable: 'DOCKERHUB_PASSWORD')]) {
-                        sh "echo ${DOCKERHUB_PASSWORD} | docker login -u ${DOCKERHUB_USER} --password-stdin"
-                    }
-
-                    sh "docker push ${DOCKERHUB_USER}/${IMAGE_NAME}:latest"
+                withCredentials([usernamePassword(credentialsId: 'docker_hub', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    echo "Logging in to Docker Hub..."
+                    bat "docker login -u %DOCKER_USER% -p %DOCKER_PASS%"
+                    echo "Pushing Docker image..."
+                    bat "docker push %IMAGE_NAME%:%IMAGE_TAG%"
                 }
             }
         }
 
         stage('Deploy to Minikube') {
             steps {
-                script {
-                    kubernetesDeploy(
-                        configs: 'deploymentsvc.yaml',
-                        kubeconfigId: "${KUBECONFIG_ID}"
-                    )
-                }
+                echo "Deploying to Minikube..."
+                bat "minikube kubectl -- apply -f deploymentsvc.yaml"
             }
         }
     }
 
     post {
         always {
-            echo 'Pipeline finished.'
+            echo "Pipeline finished."
         }
     }
 }
